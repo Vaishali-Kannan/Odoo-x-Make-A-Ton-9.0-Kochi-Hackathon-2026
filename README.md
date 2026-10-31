@@ -79,3 +79,50 @@
         </button>
       </div>
     </aside>
+    <main class="main-content" id="main-content">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="mobile-menu-btn" onclick="toggleSidebar()">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+          </button>
+          <h1 class="page-title" id="page-title">Dashboard</h1>
+        </div>
+        <div class="topbar-right">
+          <div class="search-wrap">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            <input type="text" placeholder="Search..." class="global-search" id="global-search" />
+          </div>
+          <button class="icon-btn notification-btn" onclick="toggleNotifications()">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+            <span class="badge" id="notif-badge">3</span>
+          </button>
+          <div class="topbar-avatar" id="topbar-avatar">A</div>
+        </div>
+      </header>
+      <div class="notif-drawer" id="notif-drawer">
+        <div class="notif-header">
+          <span>Notifications</span>
+          <button onclick="toggleNotifications()">&#x2715;</button>
+        </div>
+        <div class="notif-list" id="notif-list"></div>
+      </div>
+      <div class="content-area" id="content-area"></div>
+    </main>
+  </div>
+  <!-- Modal -->
+  <div class="modal-overlay" id="modal-overlay" onclick="closeModal()">
+    <div class="modal-box glass-card" onclick="event.stopPropagation()" id="modal-box">
+      <div class="modal-header">
+        <h3 id="modal-title">Modal</h3>
+        <button onclick="closeModal()">&#x2715;</button>
+      </div>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+  <!-- Toast -->
+  <div class="toast-container" id="toast-container"></div>
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
+
