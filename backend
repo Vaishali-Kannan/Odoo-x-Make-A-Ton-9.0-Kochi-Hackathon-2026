@@ -673,3 +673,216 @@ export const config = {
     .map((d) => parseInt(d.trim(), 10))
     .filter((n) => !isNaN(n)),
 };
+import { createApp } from './app.js';
+import { config } from './config/index.js';
+import cron from 'node-cron';
+import { BillingService } from './modules/billing/billing.service.js';
+import { AutomationService } from './modules/automation/automation.service.js';
+import { prisma } from './config/db.js';
+const app = createApp();
+function initSchedulers() {
+  if (!config.AUTOMATION_ENABLED) {
+    console.log('[Scheduler] Background automation disabled by configuration.');
+    return;
+  }
+  console.log('[Scheduler] Initializing automated background jobs...');
+  // Job 1: Hourly check for due recurring subscription billing
+  cron.schedule('0 * * * *', async () => {
+    try {
+      console.log('[Scheduler] Running hourly due billing cycle...');
+      await prisma.scheduledJob.create({
+        data: { job_type: 'BILLING_RUN', status: 'RUNNING' },
+      });
+      await BillingService.runDueBilling(new Date());
+    } catch (err: any) {
+      console.error('[Scheduler Error in Billing]', err);
+    }
+  });
+  // Job 2: Daily renewal reminder check at 08:00 AM
+  cron.schedule('0 8 * * *', async () => {
+    try {
+      console.log('[Scheduler] Running daily renewal reminder dispatch...');
+      await AutomationService.runRenewalReminders(new Date());
+    } catch (err: any) {
+      console.error('[Scheduler Error in Reminders]', err);
+    }
+  });
+  console.log('[Scheduler] Background jobs successfully scheduled.');
+}
+const server = app.listen(config.PORT, () => {
+  console.log(`=======================================================`);
+  console.log(`  SubscriptIQ Backend API running on port ${config.PORT}`);
+  console.log(`  Environment: ${config.NODE_ENV}`);
+  console.log(`  Business Timezone: ${config.BUSINESS_TIMEZONE}`);
+  console.log(`  Health Check: http://localhost:${config.PORT}/health`);
+  console.log(`=======================================================`);
+  initSchedulers();
+});
+export default server;
+import { BillingInterval } from '@prisma/client';
+/**
+ * Returns whether a given year is a leap year.
+ */
+export function isLeapYear(year: number): boolean {
+  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+}
+/**
+ * Returns the number of days in a given month of a given year (1-indexed month: 1=Jan, 12=Dec).
+ */
+export function getDaysInMonth(year: number, month: number): number {
+  switch (month) {
+    case 2:
+      return isLeapYear(year) ? 29 : 28;
+    case 4:
+    case 6:
+    case 9:
+    case 11:
+      return 30;
+    default:
+      return 31;
+  }
+}
+/**
+ * Calendar-aware next billing date calculation that handles:
+ * - DAILY, WEEKLY
+ * - MONTHLY (handles 28/29/30/31 days month-end clamping)
+ * - YEARLY (handles Feb 29 leap-year edge cases)
+ */
+export function calculateNextBillingDate(
+  fromDate: Date,
+  interval: BillingInterval | 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY',
+  intervalCount: number = 1
+): Date {
+  const result = new Date(fromDate);
+  switch (interval) {
+    case 'DAILY':
+      result.setUTCDate(result.getUTCDate() + intervalCount);
+      break;
+    case 'WEEKLY':
+      result.setUTCDate(result.getUTCDate() + intervalCount * 7);
+      break;
+      let targetDay = origDay;
+      if (origMonth === 1 && origDay === 29 && !isLeapYear(targetYear)) {
+        targetDay = 28;
+      }
+      return new Date(
+        Date.UTC(
+          targetYear,
+          origMonth,
+          targetDay,
+          fromDate.getUTCHours(),
+          fromDate.getUTCMinutes(),
+          fromDate.getUTCSeconds(),
+          fromDate.getUTCMilliseconds()
+        )
+      );
+    }
+    default:
+      throw new Error(`Unsupported billing interval: ${interval}`);
+  }
+${interval}`);
+  }
+  return result;
+}
+/**
+ * Calculates the start and end dates of a billing period for an active cycle.
+ */
+export function calculateBillingPeriod(
+  periodStart: Date,
+  interval: BillingInterval | 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY',
+  intervalCount: number = 1
+): { periodStart: Date; periodEnd: Date } {
+  const start = new Date(periodStart);
+  const next = calculateNextBillingDate(start, interval, intervalCount);
+  // Period end is typically 1 millisecond or end-of-day before next cycle
+  const periodEnd = new Date(next);
+  return { periodStart: start, periodEnd };
+}
+/**
+ * Checks if a subscription's next billing date is due relative to target date.
+ */
+export function isBillingDue(nextBillingDate: Date, relativeTo: Date = new Date()): boolean {
+  return new Date(nextBillingDate).getTime() <= new Date(relativeTo).getTime();
+}
+/**
+ * Calculates day difference between two dates.
+ */
+export function daysDifference(targetDate: Date, baseDate: Date = new Date()): number {
+  const msPerDay = 1000 * 60 * 60 * 24;
+  const target = new Date(targetDate).getTime();
+  const base = new Date(baseDate).getTime();
+  return Math.round((target - base) / msPerDay);
+}
+}
+/**
+ * Safely sums multiple money values avoiding floating point inaccuracies.
+ */
+export function addMoney(...values: (number | string | Prisma.Decimal)[]): number {
+  const totalCents = values.reduce((sum: number, val) => {
+    const n = typeof val === 'object' && 'toNumber' in val ? (val as any).toNumber() : Number(val);
+    return sum + Math.round((n || 0) * 100);
+  }, 0);
+  return totalCents / 100;
+}
+/**
+ * Safely subtracts money: (a - b).
+ */
+export function subMoney(
+  a: number | string | Prisma.Decimal,
+  b: number | string | Prisma.Decimal
+): number {
+  const aCents = Math.round((typeof a === 'object' && 'toNumber' in a ? (a as any).toNumber() : Number(a)) * 100);
+  const bCents = Math.round((typeof b === 'object' && 'toNumber' in b ? (b as any).toNumber() : Number(b)) * 100);
+  return (aCents - bCents) / 100;
+}
+/**
+ * Safely multiplies quantity and unit price.
+ */
+export function multiplyMoney(
+  unitPrice: number | string | Prisma.Decimal,
+  quantity: number
+): number {
+  const price = typeof unitPrice === 'object' && 'toNumber' in unitPrice ? (unitPrice as any).toNumber() : Number(unitPrice);
+  return round2(price * quantity);
+}
+/**
+ * Calculates percentage of an amount (e.g., tax or discount).
+ */
+export function calcPercentage(
+  baseAmount: number | string | Prisma.Decimal,
+ratePercent: number | string | Prisma.Decimal
+): number {
+  const base = typeof baseAmount === 'object' && 'toNumber' in baseAmount ? (baseAmount as any).toNumber() : Number(baseAmount);
+  const rate = typeof ratePercent === 'object' && 'toNumber' in ratePercent ? (ratePercent as any).toNumber() : Number(ratePercent);
+  return round2((base * rate) / 100);
+}
+/**
+ * Formats a number to currency string, e.g. "₹1,250.00"
+ */
+export function formatCurrency(amount: number | string | Prisma.Decimal, currency: string = 'INR'): string {
+  const num = typeof amount === 'object' && 'toNumber' in amount ? (amount as any).toNumber() : Number(amount);
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: currency === 'INR' ? 'INR' : currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(num);
+}
+import test from 'node:test';
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "tests"]
+}
