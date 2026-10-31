@@ -1,1 +1,16 @@
-
+NODE_ENV=development
+PORT=5001
+APP_URL=http://localhost:5001
+FRONTEND_URL=http://localhost:5173
+BUSINESS_TIMEZONE=Asia/Kolkata
+DATABASE_URL="postgresql://tom@localhost:5432/subscriptiq?schema=public"
+JWT_SECRET=super-secure-subscriptiq-jwt-secret-min-32-chars-key
+JWT_EXPIRES_IN=1d
+EMAIL_PROVIDER=mock
+SMTP_HOST=smtp.mailtrap.io
+SMTP_PORT=2525
+SMTP_USER=mock_user
+SMTP_PASS=mock_pass
+EMAIL_FROM=billing@subscriptiq.com
+AUTOMATION_ENABLED=true
+REMINDER_DAYS_BEFORE=7,3,1
