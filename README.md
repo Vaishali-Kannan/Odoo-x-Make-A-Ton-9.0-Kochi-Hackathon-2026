@@ -1,9 +1,3 @@
-```css
-/* ==========================================
-   SubscriptIQ — Subscription Management
-   Theme: Minimal, Classic Business, Pastel
-   ========================================== */
-
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 /* 1. Global Variables */
@@ -1475,4 +1469,3 @@ select:focus-visible {
         transition-duration: 0.01ms !important;
     }
 }
-```
