@@ -83,3 +83,593 @@ REMINDER_DAYS_BEFORE=7,3,1
     "typescript": "^5.8.2"
   }
 }
+  await prisma.subscription.deleteMany();
+  await prisma.quotationItem.deleteMany();
+  await prisma.quotation.deleteMany();
+  await prisma.quotationTemplateItem.deleteMany();
+  await prisma.quotationTemplate.deleteMany();
+  await prisma.planProduct.deleteMany();
+  await prisma.plan.deleteMany();
+  await prisma.productVariant.deleteMany();
+  await prisma.discountEligibility.deleteMany();
+  await prisma.discountRule.deleteMany();
+  await prisma.taxRule.deleteMany();
+  await prisma.product.deleteMany();
+  await prisma.usageEvent.deleteMany();
+  await prisma.notificationLog.deleteMany();
+  await prisma.inAppNotification.deleteMany();
+  await prisma.simulationRun.deleteMany();
+  await prisma.auditLog.deleteMany();
+  await prisma.staffProfile.deleteMany();
+  await prisma.customer.deleteMany();
+  await prisma.user.deleteMany();
+  // 2. Passwords (Compliant with >8 chars, uppercase, lowercase, special char)
+  const passwordSalt = await bcrypt.genSalt(10);
+  const adminPassword = await bcrypt.hash('Admin@1234', passwordSalt);
+  const staffPassword = await bcrypt.hash('Staff@1234', passwordSalt);
+  const customerPassword = await bcrypt.hash('Customer@1234', passwordSalt);
+  // 3. Create Users & Profiles
+  console.log('Creating Admin, Staff, and Customer users...');
+  const adminUser = await prisma.user.create({
+    data: {
+      email: 'admin@subscriptiq.com',
+      password_hash: adminPassword,
+          permissions: { canRecordPayments: true, canReviewAlerts: true },
+        },
+      },
+    },
+  });
+  const customer1User = await prisma.user.create({
+    data: {
+      email: 'customer@acme.com',
+      password_hash: customerPassword,
+      role: Role.CUSTOMER,
+      customer: {
+        create: {
+          name: 'Acme Corporation',
+          billing_email: 'customer@acme.com',
+          phone: '+91 98765 43210',
+          billing_address: 'Plot 42, Cyber Hub, Gurugram, India',
+          company_name: 'Acme Technologies Ltd.',
+        },
+      },
+    },
+    include: { customer: true },
+  });
+  const customer2User = await prisma.user.create({
+    data: {
+      email: 'customer@globex.com',
+      password_hash: customerPassword,
+      role: Role.CUSTOMER,
+      customer: {
+        create: {
+          name: 'Globex Innovations',
+          billing_email: 'customer@globex.com',
+          phone: '+91 91234 56789',
+          billing_address: 'Tower B, Tech Park, Bengaluru, India',
+          company_name: 'Globex Worldwide Pvt. Ltd.',
+        },
+   },
+    },
+    include: { customer: true },
+  });
+  const acmeCustomer = customer1User.customer!;
+  const globexCustomer = customer2User.customer!;
+  // 4. Products & Variants (with PRD 4.3 Odoo brand variant example)
+  console.log('Creating Products & Variants...');
+  const erpProduct = await prisma.product.create({
+    data: {
+      name: 'Enterprise Cloud ERP',
+      type: ProductType.SERVICE,
+      sales_price: 12000.00,
+      cost_price: 5000.00,
+      notes: 'Fully integrated accounting, inventory, and subscription platform',
+      variants: {
+        create: [
+          { name: 'Brand', option_value: 'Odoo Edition', price_adjustment: 560.00 }, // Matching PRD ₹560 example
+          { name: 'Brand', option_value: 'Standard Edition', price_adjustment: 0.00 },
+        ],
+      },
+    },
+    include: { variants: true },
+  });
+  const seatProduct = await prisma.product.create({
+    data: {
+      name: 'Active User Seat License',
+      type: ProductType.SEAT_BASED,
+      sales_price: 800.00,
+      cost_price: 150.00,
+      notes: 'Per-seat user license with SSO integration and audit logging',
+    },
+  });
+  const supportProduct = await prisma.product.create({
+    data: {
+      name: '24/7 Priority SLA Support',
+      type: ProductType.SERVICE,
+      sales_price: 2500.00,
+      cost_price: 600.00,
+      notes: '15-minute response SLA with dedicated technical account manager',
+    },
+  });
+  // 5. Plans
+  console.log('Creating Plans...');
+  const monthlyPlan = await prisma.plan.create({
+    },
+  });
+  const annualPlan = await prisma.plan.create({
+    data: {
+      name: 'Annual Enterprise Suite',
+      description: 'Comprehensive annual subscription for large teams with dedicated support',
+      billing_interval: BillingInterval.YEARLY,
+      interval_count: 1,
+      minimum_quantity: 5,
+      available_from: new Date('2024-01-01'),
+      allow_pause: true,
+      allow_early_close: false,
+      allow_renewal: true,
+      plan_products: {
+        create: [
+          { product_id: erpProduct.id, default_quantity: 1 },
+          { product_id: seatProduct.id, default_quantity: 50 },
+          { product_id: supportProduct.id, default_quantity: 1 },
+        ],
+      },
+    },
+  });
+  // 6. Tax and Discount Rules
+  console.log('Creating Tax & Discount rules...');
+  await prisma.taxRule.createMany({
+    data: [
+      { name: 'GST 18%', rate: 18.00, calculation_type: 'PERCENTAGE' },
+      { name: 'VAT 5%', rate: 5.00, calculation_type: 'PERCENTAGE' },
+    ],
+  });
+  await prisma.discountRule.create({
+        create: [{ product_id: null }],
+      },
+    },
+  });
+  await prisma.discountRule.create({
+    data: {
+      name: 'Flat ₹500 Off',
+      code: 'FLAT500',
+      discount_type: 'FIXED',
+      value: 500.00,
+      minimum_purchase: 2000.00,
+      max_uses: 50,
+      eligibilities: {
+        create: [{ product_id: null }],
+      },
+    },
+  });
+  // 7. Quotation & Template
+  console.log('Creating Quotation Template and Sample Quotations...');
+  const template = await prisma.quotationTemplate.create({
+    data: {
+      name: 'Enterprise Cloud Bundle Template',
+      validity_days: 30,
+      items: {
+        create: [
+          { product_id: erpProduct.id, plan_id: monthlyPlan.id, quantity: 1, unit_price_snapshot: 12560.00 },
+          { product_id: seatProduct.id, plan_id: monthlyPlan.id, quantity: 20, unit_price_snapshot: 800.00 },
+        ],
+      },
+    },
+  });
+  await prisma.quotation.create({
+    data: {
+      quotation_number: 'QT-2026-101',
+      customer_id: acmeCustomer.id,
+      template_id: template.id,
+      status: 'CONFIRMED',
+      valid_until: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000),
+      subtotal: 28560.00,
+ tax_total: 5140.80,
+      discount_total: 0.00,
+      total: 33700.80,
+      notes: 'Approved custom pricing including Odoo variant adjustment (+₹560).',
+      items: {
+        create: [
+          {
+            product_id: erpProduct.id,
+            variant_id: erpProduct.variants[0].id,
+            description_snapshot: 'Enterprise Cloud ERP (Brand: Odoo Edition)',
+            quantity: 1,
+            unit_price: 12560.00,
+            tax_snapshot: { rate: 18, amount: 2260.80 },
+            line_total: 14820.80,
+          },
+          {
+            product_id: seatProduct.id,
+            description_snapshot: 'Active User Seat License',
+            quantity: 20,
+            unit_price: 800.00,
+            tax_snapshot: { rate: 18, amount: 2880.00 },
+            line_total: 18880.00,
+          },
+        ],
+      },
+    },
+  });
+  // 8. Subscriptions & Billing Cycles
+  console.log('Creating Subscriptions...');
+  const now = new Date();
+  // Subscription A: DUE TODAY (Ready for Scenario 4 automated billing test)
+  const subDueToday = await prisma.subscription.create({
+    data: {
+      subscription_number: 'SUB-2026-001',
+      customer_id: acmeCustomer.id,
+      plan_id: monthlyPlan.id,
+      status: SubscriptionStatus.ACTIVE,
+      start_date: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000),
+      next_billing_date: now, // DUE TODAY!
+      payment_terms: 'Net 15',
+      items: {
+        create: [
+          {
+            product_id: erpProduct.id,
+            variant_id: erpProduct.variants[0].id,
+            description_snapshot: 'Enterprise Cloud ERP (Brand: Odoo Edition)',
+            quantity: 1,
+            unit_price_snapshot: 12560.00,
+tax_snapshot: { rate: 18 },
+          },
+          {
+            product_id: seatProduct.id,
+            description_snapshot: 'Active User Seat License',
+            quantity: 10,
+            unit_price_snapshot: 800.00,
+            tax_snapshot: { rate: 18 },
+          },
+        ],
+      },
+    },
+  });
+  // Subscription B: Due in 7 days (For Renewal Reminder test)
+  const dateIn7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  await prisma.subscription.create({
+    data: {
+      subscription_number: 'SUB-2026-002',
+      customer_id: globexCustomer.id,
+      plan_id: monthlyPlan.id,
+      status: SubscriptionStatus.ACTIVE,
+      start_date: new Date(now.getTime() - 23 * 24 * 60 * 60 * 1000),
+      next_billing_date: dateIn7Days,
+      payment_terms: 'Net 15',
+      items: {
+        create: [
+          {
+            product_id: erpProduct.id,
+            description_snapshot: 'Enterprise Cloud ERP (Standard)',
+            quantity: 1,
+            unit_price_snapshot: 12000.00,
+            tax_snapshot: { rate: 18 },
+          },
+        ],
+      },
+    },
+  });
+  // Subscription C: Due in 3 days (For Renewal Reminder test)
+  const dateIn3Days = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+  const subWithSeats = await prisma.subscription.create({
+    data: {
+      subscription_number: 'SUB-2026-003',
+      customer_id: acmeCustomer.id,
+      plan_id: annualPlan.id,
+      status: SubscriptionStatus.ACTIVE,
+      start_date: new Date(now.getTime() - 362 * 24 * 60 * 60 * 1000),
+      next_billing_date: dateIn3Days,
+      payment_terms: 'Net 30',
+items: {
+        create: [
+          {
+            product_id: erpProduct.id,
+            description_snapshot: 'Enterprise Cloud ERP',
+            quantity: 1,
+            unit_price_snapshot: 12000.00,
+            tax_snapshot: { rate: 18 },
+          },
+          {
+            product_id: seatProduct.id,
+            description_snapshot: 'Active User Seat License',
+            quantity: 100, // 100 purchased seats (will match Waste Detector test)
+            unit_price_snapshot: 800.00,
+            tax_snapshot: { rate: 18 },
+          },
+        ],
+      },
+    },
+  });
+  // 9. Existing Invoices & Payments (Scenarios 6 & 7)
+  console.log('Creating Invoices, Payments, and Explainable Snapshots...');
+  const pastInvoice = await prisma.invoice.create({
+    data: {
+      invoice_number: 'INV-2026-0001',
+      customer_id: acmeCustomer.id,
+      subscription_id: subDueToday.id,
+      billing_period_start: new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000),
+      billing_period_end: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000),
+      issue_date: new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000),
+      due_date: new Date(now.getTime() - 45 * 24 * 60 * 60 * 1000),
+      status: InvoiceStatus.PARTIALLY_PAID,
+      subtotal: 20560.00,
+      tax_total: 3700.80,
+      discount_total: 0.00,
+      total: 24260.80,
+      amount_paid: 10000.00,
+      balance_due: 14260.80,
+      items: {
+        create: [
+          {
+            product_id: erpProduct.id,
+            description_snapshot: 'Enterprise Cloud ERP (Brand: Odoo Edition)',
+            quantity: 1,
+            unit_price: 12560.00,
+            tax_rate_snapshot: 18.00,
+            tax_amount: 2260.80,
+            line_total: 14820.80,
+          },
+          },
+        ],
+      },
+      billing_snapshot: {
+        create: {
+          calculation_json: {
+            planName: 'Monthly Professional Plan',
+            billingInterval: 'MONTHLY',
+            subtotal: 20560.00,
+            taxTotal: 3700.80,
+            discountTotal: 0.00,
+            grandTotal: 24260.80,
+            lineBreakdown: [
+              {
+                product: 'Enterprise Cloud ERP (Brand: Odoo Edition)',
+                quantity: 1,
+                unitPrice: 12560.00,
+                lineSubtotal: 12560.00,
+                taxRate: '18%',
+                taxAmount: 2260.80,
+                lineTotal: 14820.80,
+                explanation: '1 × ₹12,560.00 (Base ₹12,000 + Odoo Brand ₹560) + 18% GST = ₹14,820.80',
+              },
+              {
+                product: 'Active User Seat License',
+                quantity: 10,
+                unitPrice: 800.00,
+                lineSubtotal: 8000.00,
+                taxRate: '18%',
+                taxAmount: 1440.00,
+                lineTotal: 9440.00,
+                explanation: '10 × ₹800.00 = ₹8,000.00 + 18% GST = ₹9,440.00',
+              },
+            ],
+          },
+        },
+      },
+    },
+  });
+  // Record partial payment of ₹10,000 against past invoice
+  const payment1 = await prisma.payment.create({
+  // Fully Paid Invoice
+  const paidInvoice = await prisma.invoice.create({
+    data: {
+      invoice_number: 'INV-2026-0002',
+      customer_id: globexCustomer.id,
+      billing_period_start: new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000),
+      billing_period_end: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000),
+      issue_date: new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000),
+      due_date: new Date(now.getTime() - 45 * 24 * 60 * 60 * 1000),
+      status: InvoiceStatus.PAID,
+      subtotal: 12000.00,
+      tax_total: 2160.00,
+      discount_total: 0.00,
+      total: 14160.00,
+      amount_paid: 14160.00,
+      balance_due: 0.00,
+      items: {
+        create: [
+          {
+            product_id: erpProduct.id,
+            description_snapshot: 'Enterprise Cloud ERP (Standard)',
+            quantity: 1,
+            unit_price: 12000.00,
+            tax_rate_snapshot: 18.00,
+            tax_amount: 2160.00,
+            line_total: 14160.00,
+          },
+        ],
+      },
+    },
+  });
+      status: 'COMPLETED',
+      allocations: {
+        create: [{ invoice_id: paidInvoice.id, allocated_amount: 14160.00 }],
+      },
+    },
+  });
+  // Overdue Invoice
+  await prisma.invoice.create({
+    data: {
+      invoice_number: 'INV-2026-0003',
+      customer_id: globexCustomer.id,
+      issue_date: new Date(now.getTime() - 25 * 24 * 60 * 60 * 1000),
+      due_date: new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000), // OVERDUE by 10 days!
+      status: InvoiceStatus.CONFIRMED,
+      subtotal: 5000.00,
+      tax_total: 900.00,
+      discount_total: 0.00,
+      total: 5900.00,
+      amount_paid: 0.00,
+      balance_due: 5900.00,
+      items: {
+        create: [
+          {
+            product_id: supportProduct.id,
+            description_snapshot: '24/7 Priority SLA Support',
+            quantity: 2,
+            unit_price: 2500.00,
+            tax_rate_snapshot: 18.00,
+            tax_amount: 900.00,
+            line_total: 5900.00,
+          },
+        ],
+      },
+    },
+  });
+  // 10. Scenario 8: Smart Billing Anomaly Flagged Invoice & Risk Alert
+  console.log('Creating Smart Billing Anomaly alert demo...');
+  const flaggedInvoice = await prisma.invoice.create({
+    data: {
+      tax_total: 14040.00,
+      discount_total: 0.00,
+      total: 92040.00,
+      amount_paid: 0.00,
+      balance_due: 92040.00,
+      items: {
+        create: [
+          {
+            product_id: erpProduct.id,
+            description_snapshot: 'Enterprise Cloud ERP',
+            quantity: 5, // Sudden 5x surge
+            unit_price: 12000.00,
+            tax_rate_snapshot: 18.00,
+            tax_amount: 10800.00,
+            line_total: 70800.00,
+          },
+        ],
+      },
+      risk_alerts: {
+        create: [
+          {
+            rule_code: 'AMOUNT_SPIKE',
+            severity: AlertSeverity.HIGH,
+            expected_value: '₹24,260.80 (Historical baseline cycle)',
+            observed_value: '₹92,040.00 (+279.4% deviation)',
+            reason: 'Invoice amount increased by 279.4% compared to previous cycle baseline. Admin review required prior to confirmation.',
+            status: AlertStatus.OPEN,
+          },
+        ],
+      },
+    },
+  });
+  // 11. Scenario 10: Subscription Waste Detector Telemetry Data
+  console.log('Creating Seat Utilization Telemetry for Waste Detector...');
+  // ACME has 100 purchased seats on SUB-2026-003, but only 35 active users logged in this month
+  await prisma.usageEvent.create({
+    data: {
+      customer_id: acmeCustomer.id,
+      subscription_id: subWithSeats.id,
+      product_id: seatProduct.id,
+      purchased_quantity: 100,
+      active_usage_quantity: 35, // 65 UNUSED SEATS! Matching PRD Scenario 10
+      source: 'Okta SSO Activity Telemetry',
+        growthRatePercent: 15,
+        churnRatePercent: 3,
+        priceChangePercent: 8,
+        horizonMonths: 12,
+      },
+      results_json: {
+        isSimulation: true,
+        label: 'SIMULATION ONLY — DOES NOT MODIFY LIVE RECORDS',
+        baseline: { activeSubscriptions: 3, mrr: 112560.00, arr: 1350720.00 },
+        simulatedProjectionAtHorizon: { projectedActiveSubscriptions: 11, projectedMRR: 445200.00, netMRRChange: 332640.00 },
+      },
+    },
+  });
+  console.log('--- Seeding Completed Successfully! ---');
+  console.log('Demo Credentials:');
+  console.log('  Admin:    admin@subscriptiq.com    / Admin@1234');
+  console.log('  Staff:    staff@subscriptiq.com    / Staff@1234');
+  console.log('  Customer: customer@acme.com        / Customer@1234');
+  console.log('  Customer: customer@globex.com      / Customer@1234');
+}
+main()
+  .catch((e) => {
+    console.error('Seed Error:', e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });
+mport express from 'express';
+import cors from 'cors';
+import { errorHandler } from './middleware/error.js';
+import { authRoutes } from './modules/auth/auth.routes.js';
+import { customerRoutes } from './modules/customers/customer.routes.js';
+import { productRoutes } from './modules/products/product.routes.js';
+import { planRoutes } from './modules/plans/plan.routes.js';
+import { quotationRoutes } from './modules/quotations/quotation.routes.js';
+import { subscriptionRoutes } from './modules/subscriptions/subscription.routes.js';
+import { invoiceRoutes } from './modules/invoices/invoice.routes.js';
+import { billingRoutes } from './modules/billing/billing.routes.js';
+import { paymentRoutes } from './modules/payments/payment.routes.js';
+import { taxRoutes } from './modules/taxes/tax.routes.js';
+import { discountRoutes } from './modules/discounts/discount.routes.js';
+import { automationRoutes } from './modules/automation/automation.routes.js';
+import { notificationRoutes } from './modules/automation/notifications.routes.js';
+import { intelligenceRoutes } from './modules/intelligence/intelligence.routes.js';
+import { reportRoutes } from './modules/reports/report.routes.js';
+export function createApp() {
+  const app = express();
+  app.use(cors());
+  app.use(express.json());
+  // Health check
+  app.get('/health', (req, res) => {
+    res.status(200).json({ status: 'healthy', timestamp: new Date().toISOString() });
+  });
+  // API v1 routes
+  const apiRouter = express.Router();
+  apiRouter.use('/auth', authRoutes);
+  apiRouter.use('/customers', customerRoutes);
+  apiRouter.use('/products', productRoutes);
+  apiRouter.use('/plans', planRoutes);
+  apiRouter.use('/quotations', quotationRoutes);
+  apiRouter.use('/quotation-templates', quotationRoutes);
+  apiRouter.use('/subscriptions', subscriptionRoutes);
+  apiRouter.use('/invoices', invoiceRoutes);
+  apiRouter.use('/billing', billingRoutes);
+  apiRouter.use('/payments', paymentRoutes);
+  apiRouter.use('/taxes', taxRoutes);
+ apiRouter.use('/discounts', discountRoutes);
+  apiRouter.use('/admin/automation', automationRoutes);
+  apiRouter.use('/notifications', notificationRoutes);
+  apiRouter.use('/admin', intelligenceRoutes);
+  apiRouter.use('/intelligence', intelligenceRoutes);
+  apiRouter.use('/reports', reportRoutes);
+  app.use('/api/v1', apiRouter);
+  // Centralized Error Handler
+  app.use(errorHandler);
+  return app;
+}
+
+port { PrismaClient } from '@prisma/client';
+const globalForPrisma = global as unknown as { prisma: PrismaClient };
+export const prisma =
+  globalForPrisma.prisma ||
+  new PrismaClient({
+    log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+  });
+if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
+import dotenv from 'dotenv';
+import path from 'path';
+dotenv.config();
+export const config = {
+  NODE_ENV: process.env.NODE_ENV || 'development',
+  PORT: parseInt(process.env.PORT || '5001', 10),
+  APP_URL: process.env.APP_URL || 'http://localhost:5001',
+  FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:5173',
+  BUSINESS_TIMEZONE: process.env.BUSINESS_TIMEZONE || 'Asia/Kolkata',
+  JWT_SECRET: process.env.JWT_SECRET || 'super-secure-subscriptiq-jwt-secret-min-32-chars-key',
+  JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '1d',
+  EMAIL_PROVIDER: process.env.EMAIL_PROVIDER || 'mock',
+  SMTP_HOST: process.env.SMTP_HOST || 'smtp.mailtrap.io',
+  SMTP_PORT: parseInt(process.env.SMTP_PORT || '2525', 10),
+  SMTP_USER: process.env.SMTP_USER || '',
+  SMTP_PASS: process.env.SMTP_PASS || '',
+  EMAIL_FROM: process.env.EMAIL_FROM || 'billing@subscriptiq.com',
+  AUTOMATION_ENABLED: process.env.AUTOMATION_ENABLED !== 'false',
+  REMINDER_DAYS_BEFORE: (process.env.REMINDER_DAYS_BEFORE || '7,3,1')
+    .split(',')
+    .map((d) => parseInt(d.trim(), 10))
+    .filter((n) => !isNaN(n)),
+};
